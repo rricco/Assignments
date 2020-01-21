@@ -3,7 +3,7 @@ library(DescTools)
 library(reshape2)
 # install.packages("gtools")
 library(gtools)
-library("randomForest")
+library("gbm")
 
 current_path <- getActiveDocumentContext()$path 
 setwd(dirname(current_path))
@@ -29,9 +29,9 @@ data = as.matrix(X[,-1])
 nf = nrow(data) - round(0.8*nrow(data))   #Number of forecasts
 nr = nrow(data) #Gets data length
 
-l.max = 12 #Max order 
+l.max = 18 #Max order 
 h.max = 12 #Max number of forecasting steps ahead
-y.f.bag = y.f.rf = y.f.rfTune = mtry = matrix(NA, nrow = nf, ncol = h.max) #Initialize a nf x h.max matrix
+y.f.boost = Ntrees = matrix(NA, nrow = nf, ncol = h.max) #Initialize a nf x h.max matrix
 
 dff = raw_data %>% 
   filter(Date >= AddMonths(X[((nr-nf) + 1), 1], -1) & Date <= AddMonths(X[nrow(X),1],-1)) %>% 
@@ -48,16 +48,12 @@ for (i in 1:nf){
     # focus.h = data[(nr-nf+i-h+1),(59+h-1)]
     # focus.h = data[(nr-nf+i-h+1),(59+h-1)]
     #dummies = data[(nr-nf+i-h+1),(94:103)]
-    fit = fitRF(data = data.w[(1:(l.dw-h+1)),], h = h, l.max = l.max)
+    fit = fitBoost(data = data.w[(1:(l.dw-h+1)),], h = h, l.max = l.max)
     
-
-    y.f.rf[i,h] = exp(fit$y.h)*dff$PIB[i]
     
-    y.f.rfTune[i,h] = exp(fit$y.h.RFTune)*dff$PIB[i]
+    y.f.boost[i,h] = exp(fit$y.h)*dff$PIB[i]
     
-    y.f.bag[i,h] = exp(fit$y.h.bag)*dff$PIB[i]
-    
-    mtry[i,h] = fit$mtry
+    Ntrees[i,h] = fit$ntrees
     #print((i-1)*h.max+h)
     setTxtProgressBar(pb, (i-1)*h.max+h)
   }
@@ -67,34 +63,21 @@ close(pb)
 y.r = matrix(tail(raw_data$PIB,nf) , ncol=h.max, nrow = nf) #Gets realized data
 
 #Computes RMSE(h) and MAE(h)
-rmse = sqrt(colMeans((y.f.rf - y.r)^2, na.rm = T))
-mae = colMeans(abs(y.f.rf - y.r), na.rm = T)
+rmse = sqrt(colMeans((y.f.boost - y.r)^2, na.rm = T))
+mae = colMeans(abs(y.f.boost - y.r), na.rm = T)
 
-rmse.Tune = sqrt(colMeans((y.f.rfTune - y.r)^2, na.rm = T))
-mae.Tune = colMeans(abs(y.f.rfTune - y.r), na.rm = T)
-
-rmse.bag = sqrt(colMeans((y.f.bag - y.r)^2, na.rm = T))
-mae.bag = colMeans(abs(y.f.bag - y.r), na.rm = T)
 
 #Binds RMSE and MAE values
-RF.e = rbind(rmse,mae)
-colnames(RF.e)=paste("h=", 1:h.max, sep="") #Sets column names
+Boost.e = rbind(rmse,mae)
+colnames(Boost.e)=paste("h=", 1:h.max, sep="") #Sets column names
 
-RFTune.e = rbind(rmse.Tune,mae.Tune)
-colnames(RFTune.e)=paste("h=", 1:h.max, sep="") #Sets column names
-
-Bag.e = rbind(rmse.bag,mae.bag)
-colnames(Bag.e)=paste("h=", 1:h.max, sep="") #Sets column names
 
 #Prints RMSE and MAE data
-print(round(RF.e,2))
+print(round(Boost.e,2))
 
-print(round(RFTune.e,2))
 
-print(round(Bag.e,2))
+Boost.result = Boost.e
 
-RF.result = rbind(RF.e,RFTune.e,Bag.e)
-
-save(RF.result,file=paste0("RF_lag",l.max,".Rda"))
+save(Boost.result,file=paste0("Boost_lag",l.max,".Rda"))
 
 # load("RF_lag1.Rda")

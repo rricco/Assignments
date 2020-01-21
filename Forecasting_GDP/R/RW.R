@@ -40,4 +40,7 @@ print(round(rw.e,2))
 
 rw.e = as.data.frame(rw.e)
 
+RW.result = rw.e
+
+save(RW.result,file=paste0("RW",".Rda"))
 
